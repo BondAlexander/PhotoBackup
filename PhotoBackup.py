@@ -58,7 +58,6 @@ def photoBackupOSX(target_dir):
         elif(extension[1:] in types):
             #ignore duplicates
             if(hashFile(f"{target_dir}/{file}") in hashes):
-                print("Found Dupe")
                 continue
             print(f"Found new photo: {file}")
             creation_time   = time.gmtime(os.path.getmtime(f"{target_dir}/{name}{extension}"))
@@ -80,6 +79,6 @@ def photoBackupOSX(target_dir):
 print("Populating hashes...")
 loadHashes()
 print("Done.")
-photoBackupOSX("/Users/bondalexander/Desktop/Pictures")
+photoBackupOSX("/Users/bondalexander/Desktop/PhotoLibrary")
 #photoBackupOSX("/Users/bondalexander/Downloads/Backup")
 recordHashes()
