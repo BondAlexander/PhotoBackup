@@ -1,14 +1,17 @@
-#!/Library/Frameworks/Python.framework/Versions/3.7/bin/python3
+#!/usr/path/env python
 import os
 import sys
 import time
+import argparse
 import zipfile
 import filecmp
 import hashlib
+import threading
+import math
 
-
-types = ['png', 'jpeg', 'jpg', 'mp4', 'gif', 'heif', 'HEIC', 'mov']
+types = ['png', 'jpeg', 'jpg', 'mp4', 'gif', 'heif', 'HEIC', 'mov', 'm4v']
 hashes = []
+bytes_copied = 0
 
 def loadHashes():
     if(os.path.exists(".hash_cache")):
@@ -19,7 +22,6 @@ def loadHashes():
         open(".hash_cache", "a")
         populateHashes()
 
-
 def populateHashes():
     if(os.path.exists("PhotoLibrary.zip")):
         with zipfile.ZipFile('PhotoLibrary.zip', 'a') as myzip:
@@ -29,13 +31,13 @@ def populateHashes():
                     hashes.append(hashFile(file))
                     os.remove(file)
                 except zipfile.BadZipFile as e:
-                    print(f"Couldn\'t hash {file}\nReason: {e}")
+                    pass
+                    #print(f"Couldn\'t hash {file}")
 
 def recordHashes():
     for hash in hashes:
         with open(".hash_cache", 'a') as hash_cache:
             hash_cache.write(hash + '\n')
-
 
 def hashFile(file_name):
     BLOCK_SIZE = 65536
@@ -48,7 +50,21 @@ def hashFile(file_name):
     hash = file_hash.hexdigest()
     return str(hash)
 
+def convertByteSize(bytes):
+    text_string = ""
+    size_float = float(bytes)
+    unit = "b"
+    byte_sizes = ["B", "KB", "MB", "GB", "TB"]
+    for size in byte_sizes:
+        if(size_float / 1000 < 1):
+            unit = size
+            break
+        else:
+            size_float = size_float / 1000
+    return f"{int(size_float * 100) / 100.0} {unit}"
+
 def photoBackupOSX(target_dir):
+    global args
     for file in os.listdir(target_dir):
         name, extension = os.path.splitext(file)
         #Recursive Step
@@ -58,27 +74,51 @@ def photoBackupOSX(target_dir):
         elif(extension[1:] in types):
             #ignore duplicates
             if(hashFile(f"{target_dir}/{file}") in hashes):
+                if(args.delete):
+                        os.remove(f"{target_dir}/{file}")
                 continue
-            print(f"Found new photo: {file}")
+            
+            #Gather file info
             creation_time   = time.gmtime(os.path.getmtime(f"{target_dir}/{name}{extension}"))
-            folder_name     = time.strftime('%Y %m', creation_time)
+            folder_name     = time.strftime('%b %Y', creation_time)
             file_name       = time.strftime('%d %H.%M.%S', creation_time)
+            global bytes_copied
+            bytes_copied    = bytes_copied + os.path.getsize(f"{target_dir}/{name}{extension}")
+            sys.stdout.write(f"\tFound new photo: {file} Bytes Copied: " + convertByteSize(bytes_copied) + "                             \r")
+            sys.stdout.flush()
+            #Todo Create check if safe to add file
+
+            
+            version = 1
             with zipfile.ZipFile('PhotoLibrary.zip', 'a') as myzip:
-                version = 1
                 while(True):
-                    if(f'{folder_name} {file_name}_{version}.{extension[1:]}' in myzip.namelist()):
+                    if(f'{folder_name}/{file_name}_{version}.{extension[1:]}' in myzip.namelist()):
                         version = version + 1
                     else:
                         hash = hashFile(f"{target_dir}/{file}")
-                        myzip.write(f"{target_dir}/{file}",arcname=f'{folder_name} {file_name}_{version}.{extension[1:]}')
+                        
+                        myzip.write(f"{target_dir}/{file}",arcname=f'{folder_name}/{file_name}_{version}.{extension[1:]}')
                         hashes.append(hash)
+                        if(args.delete):
+                            os.remove(f"{target_dir}/{file}")
                         break
+    
+
+def createArgs():
+    parser = argparse.ArgumentParser(description="PhotoBackup Arguments")
+    parser.add_argument("-D", "--delete", action="store_true")
+    parser.add_argument("-p", "--path")
+    
+    return parser.parse_args()
 
 
 # -------========MAIN========-------
+args = createArgs()
 print("Populating hashes...")
 loadHashes()
 print("Done.")
-photoBackupOSX("/Users/bondalexander/Desktop/PhotoLibrary")
+
+photoBackupOSX(args.path)
+
 #photoBackupOSX("/Users/bondalexander/Downloads/Backup")
-recordHashes()
+#recordHashes()
